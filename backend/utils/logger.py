@@ -64,7 +64,7 @@ def setup_logger(name: str = 'agentpress') -> logging.Logger:
         logging.Logger: Configured logger instance
     """
     logger = logging.getLogger(name)
-    logger.setLevel(logging.INFO)
+    logger.setLevel(logging.DEBUG)
     
     # Create logs directory if it doesn't exist
     log_dir = 'logs'

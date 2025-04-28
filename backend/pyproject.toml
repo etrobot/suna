@@ -1,10 +1,14 @@
-[tool.poetry]
+[project]
 name = "suna"
 version = "1.0"
 description = "open source generalist AI Agent"
-authors = ["marko-kraemer <mail@markokraemer.com>"]
-readme = "README.md"
+authors = [
+    { name = "marko-kraemer", email = "mail@markokraemer.com" }
+]
 license = "MIT"
+readme = "README.md"
+
+[tool.poetry]
 homepage = "https://www.suna.so/"
 repository = "https://github.com/kortix-ai/suna"
 classifiers = [

