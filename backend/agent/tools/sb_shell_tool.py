@@ -2,13 +2,14 @@ from typing import Optional, Dict, List
 from uuid import uuid4
 from agentpress.tool import ToolResult, openapi_schema, xml_schema
 from sandbox.sandbox import SandboxToolsBase, Sandbox
+from agentpress.thread_manager import ThreadManager
 
 class SandboxShellTool(SandboxToolsBase):
     """Tool for executing tasks in a Daytona sandbox with browser-use capabilities. 
     Uses sessions for maintaining state between commands and provides comprehensive process management."""
 
-    def __init__(self, sandbox: Sandbox):
-        super().__init__(sandbox)
+    def __init__(self, project_id: str, thread_manager: ThreadManager):
+        super().__init__(project_id, thread_manager)
         self._sessions: Dict[str, str] = {}  # Maps session names to session IDs
         self.workspace_path = "/workspace"  # Ensure we're always operating in /workspace
 
@@ -17,6 +18,7 @@ class SandboxShellTool(SandboxToolsBase):
         if session_name not in self._sessions:
             session_id = str(uuid4())
             try:
+                await self._ensure_sandbox()  # Ensure sandbox is initialized
                 self.sandbox.process.create_session(session_id)
                 self._sessions[session_name] = session_id
             except Exception as e:
@@ -27,6 +29,7 @@ class SandboxShellTool(SandboxToolsBase):
         """Clean up a session if it exists."""
         if session_name in self._sessions:
             try:
+                await self._ensure_sandbox()  # Ensure sandbox is initialized
                 self.sandbox.process.delete_session(self._sessions[session_name])
                 del self._sessions[session_name]
             except Exception as e:
@@ -72,58 +75,76 @@ class SandboxShellTool(SandboxToolsBase):
             {"param_name": "timeout", "node_type": "attribute", "path": ".", "required": False}
         ],
         example='''
-        <!-- IMPORTANT: By default, all commands are blocking and will wait for completion -->
-        
-        <!-- Example 1: Basic command execution (blocking) -->
+        <!-- BLOCKING COMMANDS (Direct Execution) -->
+        <!-- Example 1: Basic Command Execution -->
         <execute-command>
-        ls -l
+        ls -la
         </execute-command>
 
-        <!-- Example 2: Command in specific directory (blocking) -->
-        <execute-command folder="data/pdfs">
-        pdftotext document.pdf -layout
+        <!-- Example 2: Running in Specific Directory -->
+        <execute-command folder="src">
+        npm install
         </execute-command>
 
-        <!-- Example 3: Using named session for related commands (blocking) -->
-        <execute-command session_name="pdf_processing">
-        pdftotext input.pdf -layout > output.txt
+        <!-- Example 3: Long-running Process with Extended Timeout -->
+        <execute-command timeout="300">
+        npm run build
         </execute-command>
 
-        <!-- Example 4: Complex command with pipes and chaining (blocking) -->
+        <!-- Example 4: Complex Command with Environment Variables -->
         <execute-command>
-        find . -type f -name "*.txt" | sort && grep -r "pattern" . | awk '{print $1}' | sort | uniq -c
+        export NODE_ENV=production && npm run preview
         </execute-command>
 
-        <!-- Example 5: Command with error handling and chaining (blocking) -->
+        <!-- Example 5: Command with Output Redirection -->
         <execute-command>
-        pdftotext input.pdf -layout 2>&1 || echo "Error processing PDF" && ls -la output.txt
+        npm run build > build.log 2>&1
         </execute-command>
 
-        <!-- NON-BLOCKING COMMANDS: Use these for long-running operations to prevent timeouts -->
-
-        <!-- Example 6: Basic non-blocking command with & operator -->
+        <!-- NON-BLOCKING COMMANDS (TMUX Sessions) -->
+        <!-- Example 1: Start a Vite Development Server -->
         <execute-command>
-        python scraper.py --large-dataset > scraper_output.log 2>&1 &
+        tmux new-session -d -s vite_dev "cd /workspace && npm run dev"
         </execute-command>
 
-        <!-- Example 7: Run a process with nohup for immunity to hangups -->
+        <!-- Example 2: Check if Vite Server is Running -->
         <execute-command>
-        nohup python processor.py --heavy-computation > processor.log 2>&1 &
+        tmux list-sessions | grep -q vite_dev && echo "Vite server running" || echo "Vite server not found"
         </execute-command>
 
-        <!-- Example 8: Starting a background process and storing its PID -->
+        <!-- Example 3: Get Vite Server Output -->
         <execute-command>
-        python long_task.py & echo $! > task.pid
+        tmux capture-pane -pt vite_dev
         </execute-command>
 
-        <!-- Example 9: Checking if a process is still running -->
+        <!-- Example 4: Stop Vite Server -->
         <execute-command>
-        ps -p $(cat task.pid)
+        tmux kill-session -t vite_dev
         </execute-command>
 
-        <!-- Example 10: Killing a background process -->
+        <!-- Example 5: Start a Vite Build Process -->
         <execute-command>
-        kill $(cat task.pid)
+        tmux new-session -d -s vite_build "cd /workspace && npm run build"
+        </execute-command>
+
+        <!-- Example 6: Monitor Vite Build Progress -->
+        <execute-command>
+        tmux capture-pane -pt vite_build
+        </execute-command>
+
+        <!-- Example 7: Start Multiple Vite Services -->
+        <execute-command>
+        tmux new-session -d -s vite_services "cd /workspace && npm run start:all"
+        </execute-command>
+
+        <!-- Example 8: Check All Running Services -->
+        <execute-command>
+        tmux list-sessions
+        </execute-command>
+
+        <!-- Example 9: Kill All TMUX Sessions -->
+        <execute-command>
+        tmux kill-server
         </execute-command>
         '''
     )
@@ -135,6 +156,9 @@ class SandboxShellTool(SandboxToolsBase):
         timeout: int = 60
     ) -> ToolResult:
         try:
+            # Ensure sandbox is initialized
+            await self._ensure_sandbox()
+            
             # Ensure session exists
             session_id = await self._ensure_session(session_name)
             
